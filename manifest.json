@@ -1,0 +1,9 @@
+{
+    "name": "Faye Phone Support",
+    "version": "1.0.0",
+    "author": "Faye",
+    "description": "Faye小手机的后台组件。提供本地高清图片存储支持，解决 Base64 卡顿问题，支持 AI 识图。",
+    "repo": "https://github.com/Faye-dtld/fayephone",
+    "loading_order": 1,
+    "requires": []
+}

@@ -1,8 +1,7 @@
-import {
-    getBase64Async,
-    getStringHash,
-    saveBase64AsFile,
-} from "/scripts/utils.js";
+// SillyTavern Phone Support Plugin
+// 使用动态导入以确保最大兼容性
+
+console.log('[Phone Support] Plugin script initialization started...');
 
 /**
  * 插件提供的图片上传函数
@@ -11,6 +10,10 @@ import {
  */
 window.__phone_uploadImage = async function (file) {
     console.log('[Phone Support] Received image upload request', file.name);
+    
+    // 动态导入 utils，避免模块加载错误
+    const { getBase64Async, getStringHash, saveBase64AsFile } = await import('/scripts/utils.js');
+
     if (!file || typeof file !== "object" || !file.type.startsWith("image/")) {
         throw new Error("请选择图片文件！");
     }
@@ -24,6 +27,7 @@ window.__phone_uploadImage = async function (file) {
     const fileNamePrefix = `${Date.now()}_${getStringHash(file.name)}`;
     
     // 获取当前上下文（角色信息）
+    // 注意：window.SillyTavern 在某些版本可能需要通过 import 获取，但通常挂载在 window 上
     const ctx = window.SillyTavern.getContext();
     const currentCharacterId = ctx.characterId;
     
@@ -54,6 +58,10 @@ window.__phone_uploadImage = async function (file) {
  */
 window.__phone_uploadFile = async function (file) {
     console.log('[Phone Support] Received audio upload request', file.name);
+    
+    // 动态导入 utils
+    const { getBase64Async, getStringHash, saveBase64AsFile } = await import('/scripts/utils.js');
+
     if (!file || typeof file !== "object" || !file.type.startsWith("audio/")) {
         throw new Error("请选择一个音频文件！");
     }
@@ -85,4 +93,4 @@ window.__phone_uploadFile = async function (file) {
     return { url: fileUrl };
 };
 
-console.log('SillyTavern Phone Support Plugin Loaded. APIs exposed: __phone_uploadImage, __phone_uploadFile');
+console.log('[Phone Support] Plugin loaded successfully! Check window.__phone_uploadImage');

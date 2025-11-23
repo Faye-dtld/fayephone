@@ -1,61 +1,88 @@
-(function () {
-    const extensionName = "faye_phone";
-    const uploadUrl = "/api/images/upload";
+import {
+    getBase64Async,
+    getStringHash,
+    saveBase64AsFile,
+} from "../../../utils.js";
 
-    function base64ToBlob(base64, mimeType = 'image/png') {
-        // 处理可能存在的 Data URI 前缀
-        const base64Data = base64.includes(',') ? base64.split(',')[1] : base64;
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        return new Blob([byteArray], { type: mimeType });
+/**
+ * 插件提供的图片上传函数
+ * @param {File} file 图片文件对象
+ * @returns {Promise<{url: string}>} 返回包含图片URL的对象
+ */
+window.__phone_uploadImage = async function (file) {
+    console.log('[Phone Support] Received image upload request', file.name);
+    if (!file || typeof file !== "object" || !file.type.startsWith("image/")) {
+        throw new Error("请选择图片文件！");
+    }
+    
+    // 将文件转换为 base64 以便调用 SillyTavern 的保存 API
+    const fileBase64 = await getBase64Async(file);
+    const base64Data = fileBase64.split(",")[1];
+    const extension = file.type.split("/")[1] || "png";
+    
+    // 生成唯一文件名
+    const fileNamePrefix = `${Date.now()}_${getStringHash(file.name)}`;
+    
+    // 获取当前上下文（角色信息）
+    const ctx = window.SillyTavern.getContext();
+    const currentCharacterId = ctx.characterId;
+    
+    if (!currentCharacterId && currentCharacterId !== 0) {
+        throw new Error("无法获取当前角色信息，请先选择一个角色。");
     }
 
-    function handlePhoneUpload(event) {
-        const data = event.data;
-        if (!data || data.type !== 'FAYE_PHONE_UPLOAD' || !data.image) {
-            return;
-        }
+    const characters = await ctx.characters;
+    const character = characters[currentCharacterId];
+    const characterName = character["name"];
+    
+    // 保存文件到角色目录
+    const imageUrl = await saveBase64AsFile(
+        base64Data,
+        characterName,
+        fileNamePrefix,
+        extension
+    );
 
-        console.log(`[${extensionName}] Received image upload request.`);
+    console.log('[Phone Support] Image saved to:', imageUrl);
+    return { url: imageUrl };
+};
 
-        try {
-            const blob = base64ToBlob(data.image);
-            const formData = new FormData();
-            // 生成唯一文件名
-            const filename = `phone_${Date.now()}_${Math.floor(Math.random() * 1000)}.png`;
-            formData.append('avatar', blob, filename); 
-
-            jQuery.ajax({
-                url: uploadUrl,
-                type: 'POST',
-                data: formData,
-                processData: false,
-                contentType: false,
-                success: function (response) {
-                    // SillyTavern 返回的是路径字符串
-                    const path = response; 
-                    console.log(`[${extensionName}] Upload success: ${path}`);
-                    
-                    if (event.source) {
-                        event.source.postMessage({
-                            type: 'FAYE_PHONE_UPLOAD_SUCCESS',
-                            path: path
-                        }, '*');
-                    }
-                },
-                error: function (err) {
-                    console.error(`[${extensionName}] Upload failed:`, err);
-                }
-            });
-        } catch (error) {
-            console.error(`[${extensionName}] Error processing image:`, error);
-        }
+/**
+ * 插件提供的音频上传函数
+ * @param {File} file 音频文件对象
+ * @returns {Promise<{url: string}>} 返回包含音频URL的对象
+ */
+window.__phone_uploadFile = async function (file) {
+    console.log('[Phone Support] Received audio upload request', file.name);
+    if (!file || typeof file !== "object" || !file.type.startsWith("audio/")) {
+        throw new Error("请选择一个音频文件！");
+    }
+    
+    const fileBase64 = await getBase64Async(file);
+    const base64Data = fileBase64.split(",")[1];
+    const extension = file.type.split("/")[1] || "mp3";
+    const fileNamePrefix = `${Date.now()}_${getStringHash(file.name)}`;
+    
+    const ctx = window.SillyTavern.getContext();
+    const currentCharacterId = ctx.characterId;
+    
+    if (!currentCharacterId && currentCharacterId !== 0) {
+        throw new Error("无法获取当前角色信息，请先选择一个角色。");
     }
 
-    window.addEventListener('message', handlePhoneUpload);
-    console.log(`[${extensionName}] Extension loaded.`);
-})();
+    const characters = await ctx.characters;
+    const character = characters[currentCharacterId];
+    const characterName = character["name"];
+    
+    const fileUrl = await saveBase64AsFile(
+        base64Data,
+        characterName,
+        fileNamePrefix,
+        extension
+    );
+
+    console.log('[Phone Support] Audio saved to:', fileUrl);
+    return { url: fileUrl };
+};
+
+console.log('SillyTavern Phone Support Plugin Loaded. APIs exposed: __phone_uploadImage, __phone_uploadFile');

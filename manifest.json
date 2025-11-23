@@ -1,8 +1,9 @@
 {
     "display_name": "Phone UI Support",
-    "version": "1.0.4",
+    "version": "1.0.2",
     "author": "User",
     "description": "Backend support for the Phone UI. Handles image and audio uploads by saving them as files to prevent Base64 lag.",
     "main": "index.js"
 }
+
 

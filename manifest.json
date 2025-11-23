@@ -1,13 +1,9 @@
 {
-    "display_name": "fayephone",
-    "version": "1.0.2",
-    "author": "Faye",
-    "description": "Faye小手机的后台组件。提供本地高清图片存储支持，解决 Base64 卡顿问题，支持 AI 识图。",
-    "repo": "https://github.com/Faye-dtld/fayephone",
-    "loading_order": 1,
-    "requires": []
-
+    "display_name": "Phone UI Support",
+    "version": "1.0.0",
+    "author": "User",
+    "description": "Backend support for the Phone UI. Handles image and audio uploads by saving them as files to prevent Base64 lag.",
+    "main": "index.js"
 }
-
 
 

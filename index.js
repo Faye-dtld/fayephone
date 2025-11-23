@@ -2,7 +2,7 @@ import {
     getBase64Async,
     getStringHash,
     saveBase64AsFile,
-} from "../../../utils.js";
+} from "/scripts/utils.js";
 
 /**
  * 插件提供的图片上传函数

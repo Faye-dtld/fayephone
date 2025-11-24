@@ -39,7 +39,9 @@ async function adapterUpload(file) {
                 if (character && character.name) {
                     // 关键修改：将角色名作为 UserUploads 的子文件夹
                     // 这样既保证了文件按角色分类，又让路径以 UserUploads 开头，告诉 AI 这是用户上传的
-                    uploadDir = `UserUploads/${character.name}`;
+                    // 增加 sanitize 逻辑，防止特殊字符导致路径拼接错误
+                    const safeName = character.name.replace(/[\/\\:*?"<>|]/g, '_').trim();
+                    uploadDir = `UserUploads/${safeName}`;
                 }
             }
         }
@@ -52,6 +54,7 @@ async function adapterUpload(file) {
 
     // 5. 保存文件
     // saveBase64AsFile 会自动处理路径分隔符
+    // 返回的路径通常是相对路径 (例如 UserUploads/Name/file.png)
     const savedPath = await saveBase64AsFile(
         base64Data,
         uploadDir, // 传入 "UserUploads/角色名"

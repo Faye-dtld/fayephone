@@ -35,8 +35,7 @@ async function adapterUpload(file) {
         ext = file.type.split('/')[1];
     }
 
-    // 3. 获取当前上下文和角色信息 (模仿参考代码逻辑)
-    // 这种方式比直接取 context.name 更稳健，能确保存入正确的角色文件夹
+    // 3. 获取当前上下文和角色信息
     const context = getContext();
     let charName = "UserUploads";
 
@@ -44,13 +43,13 @@ async function adapterUpload(file) {
         // 尝试获取当前聊天的角色名
         if (context.characterId !== undefined && context.characters) {
             const charId = context.characterId;
-            // 确保 characters 是数组或对象
             const characters = context.characters;
+            // 直接读取角色名，不进行额外的手动净化，交由 saveBase64AsFile 处理
+            // 这样可以确保如果系统允许中文文件夹，我们能正确匹配
             if (characters[charId] && characters[charId].name) {
                 charName = characters[charId].name;
             }
         } else if (context.name) {
-            // 回退方案
             charName = context.name;
         }
     } catch (e) {
@@ -58,16 +57,12 @@ async function adapterUpload(file) {
         charName = "UserUploads";
     }
 
-    // 净化角色名，防止路径错误
-    charName = charName.replace(/[\\/:*?"<>|]/g, "");
-
     // 4. 生成文件名 (时间戳 + 哈希)
     const fileName = `${Date.now()}_${getStringHash(file.name)}`;
 
     console.log(`[FayephoneSupport] 保存目标: Character=${charName}, File=${fileName}.${ext}`);
 
     // 5. 调用酒馆内部函数保存文件
-    // 这会将文件保存到 public/UserUploads/{charName}/{fileName}.{ext}
     const savedPath = await saveBase64AsFile(
         base64Data,
         charName,
@@ -75,11 +70,12 @@ async function adapterUpload(file) {
         ext
     );
 
-    // 6. 路径标准化
-    // 确保返回的是相对路径 (UserUploads/...) 并且使用正斜杠
-    let normalizedPath = savedPath.replace(/\\/g, '/');
+    // 6. 路径标准化与解码 (关键修复)
+    // saveBase64AsFile 可能返回编码后的路径 (如 %E5%90%8C...)
+    // 我们必须解码它，否则后续再次编码会导致双重编码 (%25...)
+    let normalizedPath = decodeURI(savedPath).replace(/\\/g, '/');
     
-    // 某些版本的 ST saveBase64AsFile 可能只返回文件名，这里做个保险
+    // 确保路径完整性 (相对路径补全)
     if (!normalizedPath.includes('/') && !normalizedPath.includes('UserUploads')) {
          normalizedPath = `UserUploads/${charName}/${normalizedPath}`;
     }

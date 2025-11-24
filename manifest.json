@@ -1,9 +1,10 @@
 {
     "display_name": "Fayephone支持",
     "name": "FayephoneSupport",
-    "version": "1.0.6",
-    "description": "我的小手机专用适配器 - 解决文件上传卡顿问题",
+    "version": "1.0.7",
+    "description": "faye小手机专用适配器",
     "author": "Faye-dtld",
     "js": "index.js"
 }
+
 

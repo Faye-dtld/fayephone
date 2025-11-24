@@ -2,22 +2,11 @@
 import {
     getBase64Async,
     saveBase64AsFile,
+    getStringHash
 } from "../../../utils.js";
 
-// 辅助函数：简单的字符串哈希，用于生成短文件名
-function getStringHash(str) {
-    let hash = 0;
-    if (str.length === 0) return hash;
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash |= 0; // Convert to 32bit integer
-    }
-    return Math.abs(hash).toString(16);
-}
-
-// 核心上传函数 - 学习自 Olivia-s-Toolkit
-// 逻辑：直接利用酒馆的上下文和原生保存函数，确保路径符合 AI 读取标准
+// 核心上传函数 - 复刻 Olivia-s-Toolkit (朋友的插件) 逻辑
+// 这种方式利用了酒馆原生的上下文处理，生成的路径最容易被后端 AI 识别
 async function adapterUpload(file) {
     if (!file) throw new Error("未检测到文件");
 
@@ -27,64 +16,58 @@ async function adapterUpload(file) {
     const base64Full = await getBase64Async(file);
     const base64Data = base64Full.split(",")[1];
     
-    // 2. 确定文件扩展名
+    // 2. 确定扩展名
     let ext = 'png';
-    if (file.name.includes('.')) {
-        ext = file.name.split('.').pop();
-    } else if (file.type.includes('/')) {
-        ext = file.type.split('/')[1];
+    if (file.type.startsWith('image/')) {
+        ext = file.type.split('/')[1] || 'png';
+    } else if (file.type.startsWith('audio/')) {
+        ext = file.type.split('/')[1] || 'mp3';
+    } else if (file.type.startsWith('video/')) {
+        ext = file.type.split('/')[1] || 'mp4';
     }
 
-    // 3. 获取角色信息 (使用 window.SillyTavern 以获得最准确的上下文)
-    let charName = "UserUploads";
+    // 3. 获取上下文 (完全参考朋友的代码逻辑)
+    // 必须通过 window.SillyTavern 获取当前聊天的角色信息，这样 saveBase64AsFile 才能把图片存到正确的位置
+    let charName = "UserUploads"; // 默认兜底
     try {
-        // 优先使用全局对象获取，这是最稳妥的方式
         if (window.SillyTavern && window.SillyTavern.getContext) {
-            const context = window.SillyTavern.getContext();
-            if (context.characterId !== undefined) {
-                // 等待 characters promise 解析 (如果有) 或直接读取
-                const characters = context.characters; 
-                // 注意：在不同版本 ST 中 characters 可能是数组或 Promise，这里做个简单兼容
-                let charData = null;
-                if (Array.isArray(characters)) {
-                    charData = characters[context.characterId];
-                } else if (typeof characters === 'object') {
-                     // 某些旧版本直接是对象
-                     charData = characters[context.characterId];
-                }
-                
-                if (charData && charData.name) {
-                    charName = charData.name;
+            const ctx = window.SillyTavern.getContext();
+            const currentCharacterId = ctx.characterId;
+            const characters = ctx.characters;
+            
+            // 兼容不同版本的 characters 数据结构 (数组或对象)
+            if (characters && currentCharacterId !== undefined && currentCharacterId !== null) {
+                const character = characters[currentCharacterId];
+                if (character && character.name) {
+                    charName = character.name;
                 }
             }
         }
     } catch (e) {
-        console.warn("[FayephoneSupport] 获取全局上下文失败，尝试使用默认路径", e);
+        console.warn("[FayephoneSupport] 获取角色上下文失败:", e);
     }
 
     // 4. 生成文件名
-    const fileName = `${Date.now()}_${getStringHash(file.name)}`;
+    const fileNamePrefix = `${Date.now()}_${getStringHash(file.name)}`;
 
-    console.log(`[FayephoneSupport] 保存目标: Character=${charName}, File=${fileName}.${ext}`);
+    console.log(`[FayephoneSupport] 保存目标: Character=${charName}, File=${fileNamePrefix}.${ext}`);
 
-    // 5. 调用酒馆内部函数保存文件
-    // saveBase64AsFile 会自动处理路径，返回的一般是相对路径 (例如 "UserUploads/CharName/file.png")
+    // 5. 保存文件
+    // saveBase64AsFile 返回的是相对路径，例如 "UserUploads/CharName/file.png"
+    // 这个路径正是酒馆后端和 AI 模型所需要的
     const savedPath = await saveBase64AsFile(
         base64Data,
         charName,
-        fileName,
+        fileNamePrefix,
         ext
     );
 
-    // 6. 直接返回结果
-    // Olivia-s-Toolkit 的逻辑是直接信任这个返回值。
-    // 如果返回的路径包含 URI 编码 (如 %20)，我们解码它以便在 HTML src 中显示更友好，
-    // 但通常 img src 能处理编码。为了保险，解码并替换反斜杠。
-    const normalizedPath = decodeURI(savedPath).replace(/\\/g, '/');
-
-    console.log("[FayephoneSupport] 文件保存成功，路径:", normalizedPath);
+    // 6. 返回结果
+    // 朋友的代码直接返回 url，我们也一样。不做多余的 decodeURI，保持原样给 HTML 使用。
+    // 如果路径里有中文，saveBase64AsFile 通常已经处理好了。
+    console.log("[FayephoneSupport] 文件保存成功，路径:", savedPath);
     
-    return { url: normalizedPath };
+    return { url: savedPath };
 }
 
 // 挂载到 window，供 iframe 调用

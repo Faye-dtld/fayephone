@@ -10,9 +10,11 @@ async function adapterUpload(file) {
 
     console.log("[FayephoneSupport] 接收到文件:", file.name);
 
-    // 1. 获取当前角色名 (文件会存入该角色的文件夹)
+    // 1. 获取当前角色名
     const context = getContext();
-    const charName = context.name || "UserUploads"; 
+    // 净化文件名，移除可能导致路径问题的特殊字符
+    let charName = context.name ? context.name.replace(/[\\/:*?"<>|]/g, "") : "UserUploads";
+    if (!charName) charName = "UserUploads";
 
     // 2. 将文件转为 Base64 (用于保存API)
     const base64Full = await getBase64Async(file);
@@ -23,6 +25,7 @@ async function adapterUpload(file) {
     const fileName = `phone_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
     // 4. 调用酒馆内部函数保存文件
+    // 注意：酒馆通常会将文件保存在 public/UserUploads/{charName}/ 下
     const savedPath = await saveBase64AsFile(
         base64Data,
         charName,
@@ -30,10 +33,13 @@ async function adapterUpload(file) {
         ext
     );
 
-    console.log("[FayephoneSupport] 文件保存成功:", savedPath);
+    // 5. 路径标准化：将反斜杠转换为正斜杠，确保 Web 和 Markdown 兼容性
+    const normalizedPath = savedPath.replace(/\\/g, '/');
+
+    console.log("[FayephoneSupport] 文件保存成功:", normalizedPath);
     
-    // 5. 返回路径给小手机
-    return { url: savedPath };
+    // 6. 返回路径给小手机
+    return { url: normalizedPath };
 }
 
 // === 关键点 ===

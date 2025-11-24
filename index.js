@@ -24,8 +24,10 @@ async function adapterUpload(file) {
         ext = file.type.split('/')[1] || 'mp4';
     }
 
-    // 3. 获取上下文
-    let charName = "UserUploads"; // 默认兜底
+    // 3. 获取上下文并构建路径
+    // 关键修改：默认基础目录必须是 UserUploads，否则后端不识图
+    let uploadDir = "UserUploads"; 
+
     try {
         if (window.SillyTavern && window.SillyTavern.getContext) {
             const ctx = window.SillyTavern.getContext();
@@ -35,7 +37,9 @@ async function adapterUpload(file) {
             if (characters && currentCharacterId !== undefined && currentCharacterId !== null) {
                 const character = characters[currentCharacterId];
                 if (character && character.name) {
-                    charName = character.name;
+                    // 关键修改：将角色名作为 UserUploads 的子文件夹
+                    // 这样既保证了文件按角色分类，又让路径以 UserUploads 开头，告诉 AI 这是用户上传的
+                    uploadDir = `UserUploads/${character.name}`;
                 }
             }
         }
@@ -47,11 +51,10 @@ async function adapterUpload(file) {
     const fileNamePrefix = `${Date.now()}_${getStringHash(file.name)}`;
 
     // 5. 保存文件
-    // saveBase64AsFile 在酒馆中通常返回相对路径 (如 "UserUploads/...") 或 绝对路径
-    // 我们直接返回它，让前端决定怎么用
+    // saveBase64AsFile 会自动处理路径分隔符
     const savedPath = await saveBase64AsFile(
         base64Data,
-        charName,
+        uploadDir, // 传入 "UserUploads/角色名"
         fileNamePrefix,
         ext
     );

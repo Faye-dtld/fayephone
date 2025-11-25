@@ -1,69 +1,82 @@
-import { getContext } from "../../../extensions.js";
 import {
     getBase64Async,
     saveBase64AsFile,
+    getStringHash
 } from "../../../utils.js";
 
-// 核心上传函数
-async function adapterUpload(file, targetCharName) {
+// 核心上传函数 - 修复版
+async function adapterUpload(file, folderName) {
     if (!file) throw new Error("未检测到文件");
 
-    console.log("[FayephoneSupport] 接收到文件:", file.name);
-
-    // 1. 获取当前角色名 (文件会存入该角色的文件夹)
-    // 优先使用传入的角色名 (来自UI)，如果未定义或为占位符，则回退到 context
-    let charName = targetCharName;
-    
-    if (!charName || charName === '{{char}}') {
-        const context = getContext();
-        if (context) charName = context.name;
-    }
-
-    if (!charName) {
-        // 尝试从 context.characterId 获取（如果存在）
-        if (context.characterId && typeof Number(context.characterId) === 'number') {
-             // 这是一个备用策略，但通常 context.name 应该有值
-             console.warn("[FayephoneSupport] context.name 为空，尝试使用 ID");
-        }
-        throw new Error("未找到角色名，无法确定保存路径");
-    }
-
-    // 关键修复：清理角色名中的非法文件字符，防止保存失败
-    charName = charName.replace(/[\\/:*?"<>|]/g, "_");
-
-    // 2. 将文件转为 Base64 (用于保存API)
+    // 1. 获取 Base64 数据
     const base64Full = await getBase64Async(file);
     const base64Data = base64Full.split(",")[1];
     
-    // 3. 生成唯一文件名 (防止重名覆盖)
-    const ext = file.name.split('.').pop() || 'png';
-    const fileName = `phone_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    // 2. 确定扩展名
+    let ext = 'png';
+    if (file.type.startsWith('image/')) {
+        ext = file.type.split('/')[1] || 'png';
+    } else if (file.type.startsWith('audio/')) {
+        ext = file.type.split('/')[1] || 'mp3';
+    } else if (file.type.startsWith('video/')) {
+        ext = file.type.split('/')[1] || 'mp4';
+    }
 
-    // 4. 调用酒馆内部函数保存文件
-    // 这通常会保存到 User/images/charName/ 目录下
+    // 3. 获取上下文并构建路径
+    let safeName = "default";
+
+    // 优先使用传入的 folderName (即 characterName)，并过滤无效值
+    if (folderName && typeof folderName === 'string' && folderName !== '{{char}}' && folderName !== 'undefined') {
+        safeName = folderName;
+    } else {
+        // 回退到 ST 上下文
+        try {
+            if (window.SillyTavern && window.SillyTavern.getContext) {
+                const ctx = window.SillyTavern.getContext();
+                const currentCharacterId = ctx.characterId;
+                const characters = ctx.characters;
+                
+                if (characters && currentCharacterId !== undefined && currentCharacterId !== null) {
+                    const character = characters[currentCharacterId];
+                    if (character && character.name) {
+                        safeName = character.name;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn("[FayephoneSupport] 获取角色上下文失败:", e);
+        }
+    }
+
+    // 净化文件名，替换非法字符，防止路径错误
+    safeName = safeName.replace(/[\/\\:*?"<>|]/g, '_').trim();
+    if (!safeName) safeName = "default";
+
+    // 构建物理保存目录 (UserUploads/角色名)
+    const uploadDir = `UserUploads/${safeName}`;
+
+    // 4. 生成文件名
+    const fileNamePrefix = `${Date.now()}_${getStringHash(file.name)}`;
+
+    // 5. 保存文件 (物理保存)
     const savedPath = await saveBase64AsFile(
         base64Data,
-        charName,
-        fileName,
+        uploadDir, 
+        fileNamePrefix,
         ext
     );
 
-    console.log("[FayephoneSupport] 文件保存成功:", savedPath);
+    console.log("[FayephoneSupport] 文件已保存:", savedPath);
     
-    // 5. 格式化路径为 /user/images/角色名/文件名
-    // savedPath 通常是 "User/images/CharName/file.png"
-    let finalUrl = savedPath;
-    // 确保以 / 开头
-    if (!finalUrl.startsWith('/')) finalUrl = '/' + finalUrl;
-    // 强制将开头的 /User/ 替换为 /user/ 以满足格式要求
-    finalUrl = finalUrl.replace(/^\/User\//, '/user/');
-
-    return { url: finalUrl };
+    // 6. 构造 Web 访问路径 (强制格式: /user/images/角色名/文件名.ext)
+    const fileName = `${fileNamePrefix}.${ext}`;
+    const webPath = `/user/images/${safeName}/${fileName}`;
+    
+    // 直接返回这个标准化的路径
+    return { url: webPath };
 }
 
-// === 关键点 ===
-// 将函数挂载到 window 对象上，这样 iframe 里面的小手机
-// 就可以通过 window.parent.__fayePhoneSupport_upload 来调用它了
+// 挂载到 window，供 iframe 调用
 window.__fayePhoneSupport_upload = adapterUpload;
 
-console.log("FayephoneSupport (自定义版) 已加载成功！");
+console.log("FayephoneSupport (Path Fixed) 已加载");

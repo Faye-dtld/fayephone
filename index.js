@@ -5,15 +5,31 @@ import {
 } from "../../../utils.js";
 
 // 核心上传函数
-async function adapterUpload(file) {
+async function adapterUpload(file, targetCharName) {
     if (!file) throw new Error("未检测到文件");
 
     console.log("[FayephoneSupport] 接收到文件:", file.name);
 
     // 1. 获取当前角色名 (文件会存入该角色的文件夹)
-    const context = getContext();
-    const charName = context.name; 
-    if (!charName) throw new Error("未找到角色名，无法保存文件");
+    // 优先使用传入的角色名 (来自UI)，如果未定义或为占位符，则回退到 context
+    let charName = targetCharName;
+    
+    if (!charName || charName === '{{char}}') {
+        const context = getContext();
+        if (context) charName = context.name;
+    }
+
+    if (!charName) {
+        // 尝试从 context.characterId 获取（如果存在）
+        if (context.characterId && typeof Number(context.characterId) === 'number') {
+             // 这是一个备用策略，但通常 context.name 应该有值
+             console.warn("[FayephoneSupport] context.name 为空，尝试使用 ID");
+        }
+        throw new Error("未找到角色名，无法确定保存路径");
+    }
+
+    // 关键修复：清理角色名中的非法文件字符，防止保存失败
+    charName = charName.replace(/[\\/:*?"<>|]/g, "_");
 
     // 2. 将文件转为 Base64 (用于保存API)
     const base64Full = await getBase64Async(file);

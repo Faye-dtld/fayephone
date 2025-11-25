@@ -4,8 +4,12 @@ import {
     getStringHash
 } from "../../../utils.js";
 
-// 核心上传函数 - 修复版
-async function adapterUpload(file, folderName) {
+/**
+ * 核心上传函数 - 修复路径与上下文获取
+ * @param {File} file - 要上传的文件对象
+ * @param {string} [folderNameFromFrontend] - 前端传入的角色名（作为备用）
+ */
+async function adapterUpload(file, folderNameFromFrontend) {
     if (!file) throw new Error("未检测到文件");
 
     // 1. 获取 Base64 数据
@@ -22,65 +26,69 @@ async function adapterUpload(file, folderName) {
         ext = file.type.split('/')[1] || 'mp4';
     }
 
-    // 3. 获取上下文并构建路径
+    // 3. 获取准确的角色名 (作为保存文件夹)
     let safeName = "default";
 
-    // 优先使用传入的 folderName，并进行更严格的检查
-    if (folderName && typeof folderName === 'string' && folderName.trim() !== '' && folderName !== '{{char}}') {
-        safeName = folderName;
-    } else {
-        // 回退到 ST 上下文 (尝试从 window.SillyTavern 获取)
-        try {
-            if (window.SillyTavern && window.SillyTavern.getContext) {
-                const ctx = window.SillyTavern.getContext();
-                if (ctx.characters && ctx.characterId) {
-                    const char = ctx.characters[ctx.characterId];
-                    if (char && char.name) safeName = char.name;
-                }
+    // 优先尝试从 SillyTavern 上下文获取 (最可靠，逻辑参考 Olivia-s-Toolkit)
+    try {
+        if (window.SillyTavern && window.SillyTavern.getContext) {
+            const ctx = window.SillyTavern.getContext();
+            // 上下文中的 characters 可能是 Promise (新版ST) 或直接对象
+            let characters = ctx.characters;
+            if (characters instanceof Promise) {
+                characters = await characters;
             }
-        } catch (e) {
-            console.warn("[FayephoneSupport] 获取角色上下文失败:", e);
+            
+            const charId = ctx.characterId;
+            if (characters && characters[charId]) {
+                 safeName = characters[charId].name;
+            }
         }
+    } catch (e) {
+        console.warn("[FayephoneSupport] Context fetch failed, falling back:", e);
     }
 
-    // 净化文件名
-    // 移除路径分隔符，防止目录穿越
+    // 如果上下文获取失败，回退到前端传入的名字
+    if ((!safeName || safeName === "default") && folderNameFromFrontend && typeof folderNameFromFrontend === 'string' && folderNameFromFrontend !== '{{char}}') {
+        safeName = folderNameFromFrontend;
+    }
+
+    // 净化文件名，移除路径分隔符等非法字符
     safeName = safeName.replace(/[\/\\:*?"<>|]/g, '_').trim();
     if (!safeName) safeName = "default";
-
-    // 构建物理保存目录: UserUploads/角色名
-    // 确保 UserUploads 和 角色名 之间有分隔符
-    const uploadDir = `UserUploads/${safeName}`;
 
     // 4. 生成文件名
     const fileNamePrefix = `${Date.now()}_${getStringHash(file.name)}`;
 
     // 5. 保存文件
-    // 注意：saveBase64AsFile 通常会自动处理 UserUploads 根目录，但这里明确指定子目录
+    // 关键修改：第二个参数只传 safeName (角色名)。
+    // SillyTavern 的 saveBase64AsFile 会自动将其视为 UserUploads 下的子文件夹。
+    // 不要在这里加 "UserUploads/" 前缀，否则会变成 UserUploads/UserUploads/...
     try {
-        const savedPath = await saveBase64AsFile(
+        await saveBase64AsFile(
             base64Data,
-            uploadDir, 
+            safeName, 
             fileNamePrefix,
             ext
         );
-        console.log("[FayephoneSupport] 文件已保存:", savedPath);
+        console.log(`[FayephoneSupport] File saved to UserUploads/${safeName}/${fileNamePrefix}.${ext}`);
     } catch (err) {
-        console.error("[FayephoneSupport] 保存文件失败:", err);
-        throw new Error("文件保存失败，请检查 UserUploads 目录权限或是否存在。");
+        console.error("[FayephoneSupport] Save failed:", err);
+        throw new Error("文件保存失败: " + err.message);
     }
 
     // 6. 构造 Web 访问路径
-    // 强制格式: /user/images/角色名/文件名.ext
-    // 这里的 safeName 必须与 uploadDir 中的一致，且不包含 UserUploads 前缀
+    // 格式: /user/images/角色名/文件名.ext
+    // 这个路径用于在聊天气泡中显示图片，以及作为 API 调用时的参数
     const fileName = `${fileNamePrefix}.${ext}`;
+    
+    // 使用正斜杠构建 Web 路径
     const webPath = `/user/images/${safeName}/${fileName}`;
     
-    // 返回结果
     return { url: webPath };
 }
 
-// 挂载到 window
+// 挂载到 window 对象供 iframe 调用
 window.__fayePhoneSupport_upload = adapterUpload;
 
-console.log("FayephoneSupport (Path Fixed) 已加载");
+console.log("FayephoneSupport Adapter (Path Fixed) Loaded");

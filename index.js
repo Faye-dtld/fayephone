@@ -5,8 +5,7 @@ import {
     getStringHash
 } from "../../../utils.js";
 
-// 核心上传函数 - 复刻 Olivia-s-Toolkit (朋友的插件) 逻辑
-// 这种方式利用了酒馆原生的上下文处理，生成的路径最容易被后端 AI 识别
+// 核心上传函数 - 修复版
 async function adapterUpload(file) {
     if (!file) throw new Error("未检测到文件");
 
@@ -25,7 +24,7 @@ async function adapterUpload(file) {
     }
 
     // 3. 获取上下文并构建路径
-    // 关键修改：默认基础目录必须是 UserUploads，否则后端不识图
+    // 强制使用 UserUploads 作为根目录，这是酒馆后端识别图片附件的关键白名单目录
     let uploadDir = "UserUploads"; 
 
     try {
@@ -37,9 +36,8 @@ async function adapterUpload(file) {
             if (characters && currentCharacterId !== undefined && currentCharacterId !== null) {
                 const character = characters[currentCharacterId];
                 if (character && character.name) {
-                    // 关键修改：将角色名作为 UserUploads 的子文件夹
-                    // 这样既保证了文件按角色分类，又让路径以 UserUploads 开头，告诉 AI 这是用户上传的
-                    // 增加 sanitize 逻辑，防止特殊字符导致路径拼接错误
+                    // 关键修复：确保路径分隔符存在
+                    // 将非法字符替换为下划线，并构建 UserUploads/角色名 结构
                     const safeName = character.name.replace(/[\/\\:*?"<>|]/g, '_').trim();
                     uploadDir = `UserUploads/${safeName}`;
                 }
@@ -53,21 +51,21 @@ async function adapterUpload(file) {
     const fileNamePrefix = `${Date.now()}_${getStringHash(file.name)}`;
 
     // 5. 保存文件
-    // saveBase64AsFile 会自动处理路径分隔符
-    // 返回的路径通常是相对路径 (例如 UserUploads/Name/file.png)
     const savedPath = await saveBase64AsFile(
         base64Data,
-        uploadDir, // 传入 "UserUploads/角色名"
+        uploadDir, 
         fileNamePrefix,
         ext
     );
 
     console.log("[FayephoneSupport] 文件已保存:", savedPath);
     
+    // saveBase64AsFile 返回的路径通常是 "UserUploads/Name/file.png" (相对路径)
+    // 我们直接返回这个相对路径，交给 index.html 去处理显示前缀
     return { url: savedPath };
 }
 
 // 挂载到 window，供 iframe 调用
 window.__fayePhoneSupport_upload = adapterUpload;
 
-console.log("FayephoneSupport (Standard) 已加载");
+console.log("FayephoneSupport (Fixed) 已加载");

@@ -1,9 +1,10 @@
 {
     "display_name": "Fayephone支持",
     "name": "FayephoneSupport",
-    "version": "1.1.4",
+    "version": "1.1.5",
     "description": "faye小手机专用适配器",
     "author": "Faye-dtld",
     "js": "index.js"
 }
+
 

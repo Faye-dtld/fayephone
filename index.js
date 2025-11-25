@@ -1,4 +1,3 @@
-
 import {
     getBase64Async,
     saveBase64AsFile,
@@ -25,7 +24,7 @@ async function adapterUpload(file) {
 
     // 3. 获取上下文并构建路径
     // 强制使用 UserUploads 作为根目录，这是酒馆后端识别图片附件的关键白名单目录
-    let uploadDir = "UserUploads"; 
+    let safeName = "default";
 
     try {
         if (window.SillyTavern && window.SillyTavern.getContext) {
@@ -36,10 +35,8 @@ async function adapterUpload(file) {
             if (characters && currentCharacterId !== undefined && currentCharacterId !== null) {
                 const character = characters[currentCharacterId];
                 if (character && character.name) {
-                    // 关键修复：确保路径分隔符存在
-                    // 将非法字符替换为下划线，并构建 UserUploads/角色名 结构
-                    const safeName = character.name.replace(/[\/\\:*?"<>|]/g, '_').trim();
-                    uploadDir = `UserUploads/${safeName}`;
+                    // 替换非法字符，避免文件夹名称错误
+                    safeName = character.name.replace(/[\/\\:*?"<>|]/g, '_').trim();
                 }
             }
         }
@@ -47,10 +44,13 @@ async function adapterUpload(file) {
         console.warn("[FayephoneSupport] 获取角色上下文失败:", e);
     }
 
+    // 构建物理保存目录 (UserUploads/角色名)
+    const uploadDir = `UserUploads/${safeName}`;
+
     // 4. 生成文件名
     const fileNamePrefix = `${Date.now()}_${getStringHash(file.name)}`;
 
-    // 5. 保存文件
+    // 5. 保存文件 (物理保存)
     const savedPath = await saveBase64AsFile(
         base64Data,
         uploadDir, 
@@ -60,12 +60,16 @@ async function adapterUpload(file) {
 
     console.log("[FayephoneSupport] 文件已保存:", savedPath);
     
-    // saveBase64AsFile 返回的路径通常是 "UserUploads/Name/file.png" (相对路径)
-    // 我们直接返回这个相对路径，交给 index.html 去处理显示前缀
-    return { url: savedPath };
+    // 6. 构造 Web 访问路径 (强制格式: /user/images/角色名/文件名.ext)
+    // 注意：saveBase64AsFile 保存的文件名是 prefix + '.' + ext
+    const fileName = `${fileNamePrefix}.${ext}`;
+    const webPath = `/user/images/${safeName}/${fileName}`;
+    
+    // 直接返回这个标准化的路径，前端不再需要做任何 UserUploads 的转换
+    return { url: webPath };
 }
 
 // 挂载到 window，供 iframe 调用
 window.__fayePhoneSupport_upload = adapterUpload;
 
-console.log("FayephoneSupport (Fixed) 已加载");
+console.log("FayephoneSupport (Path Fixed) 已加载");

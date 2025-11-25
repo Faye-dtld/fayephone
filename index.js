@@ -29,7 +29,7 @@ async function adapterUpload(file, folderNameFromFrontend) {
     // 3. 获取准确的角色名 (作为保存文件夹)
     let safeName = "default";
 
-    // 优先尝试从 SillyTavern 上下文获取 (最可靠，逻辑参考 Olivia-s-Toolkit)
+    // 优先尝试从 SillyTavern 上下文获取
     try {
         if (window.SillyTavern && window.SillyTavern.getContext) {
             const ctx = window.SillyTavern.getContext();
@@ -63,7 +63,6 @@ async function adapterUpload(file, folderNameFromFrontend) {
     // 5. 保存文件
     // 关键修改：第二个参数只传 safeName (角色名)。
     // SillyTavern 的 saveBase64AsFile 会自动将其视为 UserUploads 下的子文件夹。
-    // 不要在这里加 "UserUploads/" 前缀，否则会变成 UserUploads/UserUploads/...
     try {
         await saveBase64AsFile(
             base64Data,
@@ -77,15 +76,17 @@ async function adapterUpload(file, folderNameFromFrontend) {
         throw new Error("文件保存失败: " + err.message);
     }
 
-    // 6. 构造 Web 访问路径
-    // 格式: /user/images/角色名/文件名.ext
-    // 这个路径用于在聊天气泡中显示图片，以及作为 API 调用时的参数
+    // 6. 构造路径
     const fileName = `${fileNamePrefix}.${ext}`;
     
-    // 使用正斜杠构建 Web 路径
+    // Web 路径: 用于前端 img 标签显示 (通过 ST 的静态文件路由)
     const webPath = `/user/images/${safeName}/${fileName}`;
+
+    // 文件系统路径: 用于传给 AI 生成函数 (ST 后端读取)
+    // 注意：ST 通常期望相对于根目录的路径，或者 UserUploads 开头的路径
+    const filePath = `UserUploads/${safeName}/${fileName}`;
     
-    return { url: webPath };
+    return { url: webPath, filePath: filePath };
 }
 
 // 挂载到 window 对象供 iframe 调用

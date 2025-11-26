@@ -54,6 +54,7 @@ async function adapterUpload(file, folderNameFromFrontend) {
     }
 
     // 净化文件名，移除路径分隔符等非法字符
+    // 注意：不要使用 encodeURIComponent，否则中文会变成 %E4%BD%A0 这种乱码形式作为文件夹名
     safeName = safeName.replace(/[\/\\:*?"<>|]/g, '_').trim();
     if (!safeName) safeName = "default";
 

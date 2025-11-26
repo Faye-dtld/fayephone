@@ -64,6 +64,17 @@ async function adapterUpload(file, folderNameFromFrontend) {
     // 关键修改：第二个参数只传 safeName (角色名)。
     // SillyTavern 的 saveBase64AsFile 会自动将其视为 UserUploads 下的子文件夹。
     try {
+        // 注意：saveBase64AsFile 的参数签名通常是 (base64, userName, fileName, extension)
+        // 但这里的 userName 其实是被用作子文件夹名。
+        // 为了确保万无一失，我们直接使用 uploadAsFile (如果可用) 或者确保 saveBase64AsFile 的行为符合预期
+        
+        // 检查是否是新版 API uploadAsFile (支持 File 对象直接上传，更高效)
+        if (window.uploadAsFile) {
+             await window.uploadAsFile(file, safeName);
+             // uploadAsFile 通常保留原文件名或自动重命名，我们需要确认它的返回值
+             // 但为了稳妥，我们还是用 saveBase64AsFile 这种老方法，因为我们已经有了 base64
+        }
+        
         await saveBase64AsFile(
             base64Data,
             safeName, 

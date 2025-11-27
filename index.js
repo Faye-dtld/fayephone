@@ -54,7 +54,6 @@ async function adapterUpload(file, folderNameFromFrontend) {
     }
 
     // 净化文件名，移除路径分隔符等非法字符
-    // 注意：不要使用 encodeURIComponent，否则中文会变成 %E4%BD%A0 这种乱码形式作为文件夹名
     safeName = safeName.replace(/[\/\\:*?"<>|]/g, '_').trim();
     if (!safeName) safeName = "default";
 
@@ -101,7 +100,50 @@ async function adapterUpload(file, folderNameFromFrontend) {
     return { url: webPath, filePath: filePath };
 }
 
+/**
+ * 获取当前角色信息的辅助函数
+ * 供 iframe 内部调用以获取稳定的存储 Key
+ */
+function getCharacterInfo() {
+    try {
+        // 1. 尝试使用 TavernHelper (如果可用)
+        if (window.TavernHelper) {
+            const charData = window.TavernHelper.getCharData('current');
+            if (charData) {
+                let charId = null;
+                // 尝试获取索引 ID
+                if (window.TavernHelper.RawCharacter && window.TavernHelper.RawCharacter.findCharacterIndex) {
+                    charId = window.TavernHelper.RawCharacter.findCharacterIndex(charData.name);
+                }
+                
+                return {
+                    name: charData.name,
+                    id: charId,
+                    // 如果获取不到 ID，就用名字作为 ID (虽然名字可变，但比没有好)
+                    storageKey: charId !== null && charId !== -1 ? `char_id_${charId}` : `char_name_${charData.name}`
+                };
+            }
+        }
+        
+        // 2. 回退到 SillyTavern 上下文
+        if (window.SillyTavern && window.SillyTavern.getContext) {
+            const ctx = window.SillyTavern.getContext();
+            if (ctx.characterId !== undefined && ctx.characters && ctx.characters[ctx.characterId]) {
+                return {
+                    name: ctx.characters[ctx.characterId].name,
+                    id: ctx.characterId,
+                    storageKey: `char_id_${ctx.characterId}`
+                };
+            }
+        }
+    } catch (e) {
+        console.error("[FayephoneSupport] Error getting character info:", e);
+    }
+    return null;
+}
+
 // 挂载到 window 对象供 iframe 调用
 window.__fayePhoneSupport_upload = adapterUpload;
+window.__fayePhoneSupport_getCharInfo = getCharacterInfo;
 
 console.log("FayephoneSupport Adapter (Path Fixed) Loaded");
